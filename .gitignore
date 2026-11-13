@@ -33,6 +33,12 @@ dist/
 .next/
 .cache/
 
+# SQLite & Databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
 # SPD Engine Files
 .spd/
 session.db*

@@ -1,0 +1,23 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Sunflower {
+  id               String   @id @default(uuid())
+  name             String   @default("Sunny Sprout")
+  growthStage      Int      @default(0) // 0 to 100
+  waterLevel       Int      @default(60) // 0 to 100
+  sunlightExposure Int      @default(50) // 0 to 100
+  petalColor       String   @default("#FFD700") // Hex color code
+  height           Float    @default(5.0) // Height in centimeters
+  lastWateredAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("sunflowers")
+}

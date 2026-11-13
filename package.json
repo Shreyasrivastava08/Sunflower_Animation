@@ -1,0 +1,16 @@
+{
+  "name": "sunflower-animation-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack Interactive Sunflower Animation Web Application",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "seed:backend": "npm --prefix backend run seed",
+    "test:backend": "npm --prefix backend run test:api",
+    "db:push": "npm --prefix backend run db:push",
+    "db:studio": "npm --prefix backend run db:studio"
+  },
+  "keywords": ["sunflower", "canvas", "animation", "express", "prisma", "sqlite"],
+  "author": "",
+  "license": "ISC"
+}
