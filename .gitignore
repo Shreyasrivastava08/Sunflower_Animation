@@ -30,6 +30,8 @@ env/
 node_modules/
 .npm/
 dist/
+build/
+*.tsbuildinfo
 .next/
 .cache/
 

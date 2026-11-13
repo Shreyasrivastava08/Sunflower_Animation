@@ -5,6 +5,8 @@
   "description": "Full-stack Interactive Sunflower Animation Web Application",
   "scripts": {
     "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
     "seed:backend": "npm --prefix backend run seed",
     "test:backend": "npm --prefix backend run test:api",
     "db:push": "npm --prefix backend run db:push",

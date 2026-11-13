@@ -9,8 +9,8 @@ An interactive botanical animation web application simulating the lifecycle, gro
 | Phase | Title | Status | Description |
 |---|---|---|---|
 | **Phase 1** | **Backend & Database Layer** | **✅ Completed** | Express + Prisma + SQLite backend, REST API, Zod validations, nurture logic, seed script, automated test suite. |
-| **Phase 2** | **Frontend & Canvas Animation** | ⏳ *Next Up* | Interactive HTML5 Canvas / WebGL rendering, Fibonacci phyllotaxis, growth stages, nurture controls, reactive UI. |
-| **Phase 3** | **Integration, Polish & Audio** | ⏳ *Planned* | State synchronization, botanical sound effects, responsive styling, and production packaging. |
+| **Phase 2** | **Frontend & Canvas Animation** | **✅ Completed** | 60FPS procedural botanical canvas, Fibonacci phyllotaxis seeds, 34-petal bloom, heliotropism cursor tracking, particle systems, glassmorphic HUD, growth scrubber. |
+| **Phase 3** | **Integration, Polish & Audio** | ⏳ *Next Up* | Live state synchronization between frontend & backend, sound effects, responsive styling polish, and deployment packaging. |
 
 ---
 
@@ -70,16 +70,26 @@ npm run seed
 ```
 *Creates the starter sunflower (`Helianthus Starter`, id: `starter-sunflower-001`).*
 
-### 5. Start the Development Server
+### 5. Start the Development Servers
+In one terminal, start the Backend API:
 ```bash
-npm run dev
+npm run dev:backend
 ```
-The server will start on **`http://localhost:5000`**.
+The backend starts on **`http://localhost:5000`**.
 
-### 6. Run the Automated Test Suite
-In another terminal:
+In another terminal, start the Frontend Canvas Application:
 ```bash
-npm run test:api
+npm run dev:frontend
+```
+The frontend starts on **`http://localhost:5173`**.
+
+### 6. Run the Automated Test Suite & Build
+```bash
+# Run backend API tests (11/11 tests pass)
+npm run test:backend
+
+# Run frontend TypeScript & Vite build
+npm run build:frontend
 ```
 
 ---
