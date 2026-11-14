@@ -12,12 +12,12 @@ export interface SunflowerCanvasProps {
 }
 
 export interface SunflowerCanvasHandle {
-  triggerBurst: (action: NurtureAction) => void;
+  triggerBurst: (action: NurtureAction | 'celebrate') => void;
 }
 
 interface Particle {
   id: number;
-  type: 'water' | 'sunlight' | 'fertilize';
+  type: 'water' | 'sunlight' | 'fertilize' | 'celebrate' | 'pollen';
   x: number;
   y: number;
   vx: number;
@@ -89,14 +89,17 @@ export const SunflowerCanvas = forwardRef<SunflowerCanvasHandle, SunflowerCanvas
       time: 0,
     });
 
+    // Track previous growth to detect first-time full bloom crossing
+    const prevGrowthRef = useRef<number>(growthStage);
+
     // Expose particle trigger to parent
     useImperativeHandle(ref, () => ({
-      triggerBurst(action: NurtureAction) {
+      triggerBurst(action: NurtureAction | 'celebrate') {
         spawnBurst(action);
       },
     }));
 
-    const spawnBurst = useCallback((action: NurtureAction) => {
+    const spawnBurst = useCallback((action: NurtureAction | 'celebrate') => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
@@ -105,7 +108,34 @@ export const SunflowerCanvas = forwardRef<SunflowerCanvasHandle, SunflowerCanvas
       const flowerHeadX = width / 2;
       const flowerHeadY = height * 0.4;
 
-      if (action === 'water') {
+      if (action === 'celebrate') {
+        // Celebratory Grand Bloom Burst: 100 golden pollen motes & fluttering petals
+        for (let i = 0; i < 110; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 2.5 + Math.random() * 6.5;
+          const isPetal = i % 3 === 0;
+
+          particlesRef.current.push({
+            id: nextParticleIdRef.current++,
+            type: 'celebrate',
+            x: flowerHeadX,
+            y: flowerHeadY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 1.5,
+            size: isPetal ? 4 + Math.random() * 5 : 2 + Math.random() * 3,
+            alpha: 1,
+            life: 0,
+            maxLife: 120 + Math.random() * 60,
+            color: isPetal
+              ? petalColor
+              : Math.random() > 0.5
+              ? '#FFD700'
+              : '#FDE047',
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 0.15,
+          });
+        }
+      } else if (action === 'water') {
         // Spawn 45 gentle falling blue water droplets
         for (let i = 0; i < 45; i++) {
           particlesRef.current.push({
@@ -164,7 +194,15 @@ export const SunflowerCanvas = forwardRef<SunflowerCanvasHandle, SunflowerCanvas
           });
         }
       }
-    }, []);
+    }, [petalColor]);
+
+    // Automatically trigger celebratory golden pollen/petal burst when full bloom is achieved
+    useEffect(() => {
+      if (growthStage >= 100 && prevGrowthRef.current < 100) {
+        spawnBurst('celebrate');
+      }
+      prevGrowthRef.current = growthStage;
+    }, [growthStage, spawnBurst]);
 
     // Animation & Canvas Render Loop
     useEffect(() => {
@@ -670,6 +708,31 @@ export const SunflowerCanvas = forwardRef<SunflowerCanvasHandle, SunflowerCanvas
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
             ctx.fill();
+            ctx.restore();
+          } else if (p.type === 'celebrate') {
+            // Celebratory golden pollen & fluttering petals
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            if (p.rotation !== undefined) ctx.rotate(p.rotation);
+            p.vy += 0.04; // gentle gravity
+            p.vx *= 0.985; // air resistance
+            ctx.globalAlpha = currentAlpha;
+
+            if (p.size > 3.5) {
+              // Fluttering petal shape
+              ctx.fillStyle = p.color || '#FFD700';
+              ctx.beginPath();
+              ctx.ellipse(0, 0, p.size * 1.4, p.size * 0.55, 0, 0, Math.PI * 2);
+              ctx.fill();
+            } else {
+              // Glowing golden pollen spark
+              ctx.fillStyle = p.color || '#FDE047';
+              ctx.shadowBlur = 10;
+              ctx.shadowColor = '#FBBF24';
+              ctx.beginPath();
+              ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+              ctx.fill();
+            }
             ctx.restore();
           }
 

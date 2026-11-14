@@ -7,12 +7,17 @@ import { NurtureControls } from './components/NurtureControls';
 import { GrowthScrubber } from './components/GrowthScrubber';
 import { GardenSelector } from './components/GardenSelector';
 import { PlantModal } from './components/PlantModal';
+import { soundEffects } from './utils/soundEffects';
 
 export const App: React.FC = () => {
   const [sunflowers, setSunflowers] = useState<Sunflower[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
-  const [isLiveApi, setIsLiveApi] = useState<boolean>(false);
+  const [isLiveApi, setIsLiveApi] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isPlantModalOpen, setIsPlantModalOpen] = useState<boolean>(false);
+
+  // Sound Engine Mute State (muted by default)
+  const [isMuted, setIsMuted] = useState<boolean>(soundEffects.isMuted());
 
   // Growth Scrubber / Preview Mode
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
@@ -23,28 +28,55 @@ export const App: React.FC = () => {
 
   const canvasRef = useRef<SunflowerCanvasHandle | null>(null);
 
-  // Load flowers on mount
+  // Load flowers on initial mount
   useEffect(() => {
-    loadSunflowers();
-  }, [isLiveApi]);
+    loadSunflowers(true);
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 3500);
+    }, 4000);
   };
 
-  const loadSunflowers = async () => {
-    sunflowerApi.setLiveMode(isLiveApi);
-    const list = await sunflowerApi.getAll();
-    setSunflowers(list);
-    if (list.length > 0) {
-      // Keep selected or pick first
-      if (!selectedId || !list.some((s) => s.id === selectedId)) {
-        setSelectedId(list[0].id);
-        setScrubGrowth(list[0].growthStage);
+  const loadSunflowers = async (isInitial = false) => {
+    setIsLoading(true);
+    try {
+      const isOnline = await sunflowerApi.checkHealth();
+      setIsLiveApi(isOnline);
+
+      const result = await sunflowerApi.getAll();
+      setSunflowers(result.data);
+
+      if (result.data.length > 0) {
+        setSelectedId((current) => {
+          if (!current || !result.data.some((s) => s.id === current)) {
+            const first = result.data[0];
+            setScrubGrowth(first.growthStage);
+            return first.id;
+          }
+          const existing = result.data.find((s) => s.id === current);
+          if (existing && !isScrubbing) {
+            setScrubGrowth(existing.growthStage);
+          }
+          return current;
+        });
       }
+
+      if (isInitial) {
+        if (result.source === 'live') {
+          showToast('🟢 Connected to Express backend (:5000) & SQLite DB');
+        } else {
+          showToast('⚠️ Express backend offline: Running in Local Garden Mode');
+        }
+      } else {
+        showToast(result.source === 'live' ? '🔄 Synced with live database' : '🔄 Synced with local garden');
+      }
+    } catch (err: any) {
+      showToast(`Sync error: ${err.message || 'Could not fetch garden'}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -56,40 +88,105 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleToggleLiveApi = (enabled: boolean) => {
-    setIsLiveApi(enabled);
-    sunflowerApi.setLiveMode(enabled);
-    showToast(enabled ? '📡 Switched to Live API mode' : '🏡 Switched to Local Mock mode');
+  const handleToggleSound = () => {
+    const newMuted = soundEffects.toggleMute();
+    setIsMuted(newMuted);
+    showToast(newMuted ? '🔇 Ambient Sound Effects Muted' : '🔊 Ambient Botanical Sounds Enabled');
   };
 
   const handleNurture = async (action: NurtureAction) => {
     if (!selectedId) return;
+    const currentFlower = sunflowers.find((s) => s.id === selectedId);
+    if (!currentFlower) return;
 
-    // Trigger canvas particle burst immediately for responsive feedback
+    const prevGrowth = currentFlower.growthStage;
+
+    // 1. Trigger Canvas Particle System immediately
     canvasRef.current?.triggerBurst(action);
 
+    // 2. Play Synthesized Web Audio Effect
+    if (action === 'water') {
+      soundEffects.playWaterSplash();
+    } else if (action === 'sunlight') {
+      soundEffects.playSunShimmer();
+    } else if (action === 'fertilize') {
+      soundEffects.playFertilizeChime();
+    }
+
+    // 3. Optimistic UI update for instantaneous responsiveness
+    const optimisticDelta = action === 'fertilize' ? 15 : 8;
+    const optimisticGrowth = Math.min(100, currentFlower.growthStage + optimisticDelta);
+    const optimisticHeight = Math.min(220, Math.round((currentFlower.height + (action === 'fertilize' ? 6.5 : 3.8)) * 10) / 10);
+    const optimisticWater = action === 'water'
+      ? Math.min(100, currentFlower.waterLevel + 20)
+      : Math.max(0, currentFlower.waterLevel - (action === 'fertilize' ? 10 : 8));
+    const optimisticSun = action === 'sunlight'
+      ? Math.min(100, currentFlower.sunlightExposure + 20)
+      : Math.max(0, currentFlower.sunlightExposure - (action === 'fertilize' ? 6 : 4));
+
+    setSunflowers((prev) =>
+      prev.map((s) =>
+        s.id === selectedId
+          ? {
+              ...s,
+              growthStage: optimisticGrowth,
+              height: optimisticHeight,
+              waterLevel: optimisticWater,
+              sunlightExposure: optimisticSun,
+              lastWateredAt: action === 'water' ? new Date().toISOString() : s.lastWateredAt,
+            }
+          : s
+      )
+    );
+
+    if (!isScrubbing) {
+      setScrubGrowth(optimisticGrowth);
+    }
+
     try {
+      // 4. Send Live REST Request to Backend (PATCH /api/sunflowers/:id/nurture)
       const result = await sunflowerApi.nurture(selectedId, action);
-      // Update local state
+      setIsLiveApi(result.source === 'live');
+
+      // Update state with confirmed database record
       setSunflowers((prev) =>
         prev.map((s) => (s.id === selectedId ? result.sunflower : s))
       );
       if (!isScrubbing) {
         setScrubGrowth(result.sunflower.growthStage);
       }
-      showToast(result.message);
+
+      // Check Milestone Chimes
+      if (prevGrowth < 50 && result.sunflower.growthStage >= 50) {
+        soundEffects.playBloomChime(50);
+        showToast('🌾 Milestone Reached: Swelling Flower Bud!');
+      } else if (prevGrowth < 100 && result.sunflower.growthStage >= 100) {
+        soundEffects.playBloomChime(100);
+        canvasRef.current?.triggerBurst('celebrate');
+        showToast('🌻 Celebration: Radiant 100% Full Bloom!');
+      } else {
+        showToast(result.message);
+      }
     } catch (err: any) {
-      showToast(`Error: ${err.message || 'Action failed'}`);
+      showToast(`Error nurturing sunflower: ${err.message || 'Server error'}`);
     }
   };
 
   const handlePlant = async (input: CreateSunflowerInput) => {
     try {
-      const created = await sunflowerApi.create(input);
+      const result = await sunflowerApi.create(input);
+      setIsLiveApi(result.source === 'live');
+      const created = result.data;
+
       setSunflowers((prev) => [created, ...prev]);
       setSelectedId(created.id);
       setScrubGrowth(created.growthStage);
-      showToast(`Planted "${created.name}" successfully! 🌱`);
+
+      showToast(
+        result.source === 'live'
+          ? `Planted "${created.name}" in SQLite database! 🌱`
+          : `Planted "${created.name}" locally! 🌱`
+      );
     } catch (err: any) {
       showToast(`Error planting seed: ${err.message || 'Failed'}`);
     }
@@ -104,7 +201,7 @@ export const App: React.FC = () => {
         setSelectedId(remaining[0].id);
         setScrubGrowth(remaining[0].growthStage);
       }
-      showToast('Sunflower removed from garden.');
+      showToast('Sunflower removed.');
     } catch (err: any) {
       showToast(`Error deleting sunflower: ${err.message}`);
     }
@@ -112,7 +209,8 @@ export const App: React.FC = () => {
 
   const selectedFlower = sunflowers.find((s) => s.id === selectedId);
 
-  // Effective values passed to canvas (allows scrub mode override)
+  // Effective values passed to canvas:
+  // If growth scrubber is enabled, it temporarily previews canvas growth without mutating the DB
   const effectiveGrowth = isScrubbing ? scrubGrowth : (selectedFlower?.growthStage ?? 0);
   const effectiveHeight = isScrubbing
     ? Math.max(5, 5 + (scrubGrowth / 100) * 195)
@@ -128,7 +226,8 @@ export const App: React.FC = () => {
         onOpenPlantModal={() => setIsPlantModalOpen(true)}
         onDeleteSunflower={handleDelete}
         isLiveApi={isLiveApi}
-        onToggleLiveApi={handleToggleLiveApi}
+        onRefresh={() => loadSunflowers(false)}
+        isLoading={isLoading}
       />
 
       {/* Main Procedural Canvas Viewport */}
@@ -166,6 +265,8 @@ export const App: React.FC = () => {
                 growthStage: effectiveGrowth,
                 height: effectiveHeight,
               }}
+              isMuted={isMuted}
+              onToggleSound={handleToggleSound}
             />
           </div>
         )}
@@ -174,7 +275,7 @@ export const App: React.FC = () => {
         {selectedFlower && (
           <div className="absolute bottom-6 left-0 right-0 z-10 flex flex-col items-center gap-3 px-4 pointer-events-none">
             <div className="pointer-events-auto flex flex-col items-center gap-3 w-full max-w-xl">
-              <NurtureControls onNurture={handleNurture} />
+              <NurtureControls onNurture={handleNurture} disabled={isLoading} />
               <GrowthScrubber
                 isScrubbing={isScrubbing}
                 onToggleScrubbing={setIsScrubbing}

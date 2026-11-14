@@ -1,67 +1,42 @@
 import { Sunflower, CreateSunflowerInput, NurtureAction, NurtureResult } from '../types/sunflower';
 
-const API_BASE = '/api/sunflowers';
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+const API_ENDPOINT = `${BASE_URL}/api/sunflowers`;
 
-// Initial local garden data matching backend starter seed
-const INITIAL_MOCK_SUNFLOWERS: Sunflower[] = [
+const INITIAL_STARTER_SUNFLOWERS: Sunflower[] = [
   {
     id: 'starter-sunflower-001',
     name: 'Helianthus Starter',
     growthStage: 35,
     waterLevel: 75,
     sunlightExposure: 80,
-    petalColor: '#FFD700', // Classic Golden Yellow
+    petalColor: '#FFD700',
     height: 45.0,
-    lastWateredAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-sunflower-bloom',
-    name: 'Solaris Radiance',
-    growthStage: 95,
-    waterLevel: 85,
-    sunlightExposure: 90,
-    petalColor: '#FF7F50', // Sunset Coral
-    height: 165.0,
-    lastWateredAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-sunflower-seedling',
-    name: 'Ruby Sprout',
-    growthStage: 10,
-    waterLevel: 60,
-    sunlightExposure: 65,
-    petalColor: '#DC143C', // Crimson Velvet
-    height: 8.5,
     lastWateredAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
 ];
 
-// Persistent local storage cache for mock mode
-function loadLocalSunflowers(): Sunflower[] {
+function loadLocalCache(): Sunflower[] {
   try {
-    const raw = localStorage.getItem('sunflower_garden_state');
+    const raw = localStorage.getItem('sunflower_garden_cache');
     if (raw) return JSON.parse(raw);
   } catch (e) {
-    console.warn('Could not read from localStorage:', e);
+    console.warn('Unable to load localStorage cache:', e);
   }
-  return INITIAL_MOCK_SUNFLOWERS;
+  return INITIAL_STARTER_SUNFLOWERS;
 }
 
-function saveLocalSunflowers(items: Sunflower[]) {
+function saveLocalCache(items: Sunflower[]) {
   try {
-    localStorage.setItem('sunflower_garden_state', JSON.stringify(items));
+    localStorage.setItem('sunflower_garden_cache', JSON.stringify(items));
   } catch (e) {
-    console.warn('Could not save to localStorage:', e);
+    console.warn('Unable to save localStorage cache:', e);
   }
 }
 
-let mockSunflowers: Sunflower[] = loadLocalSunflowers();
+let localCache: Sunflower[] = loadLocalCache();
 
 function clamp(v: number, min = 0, max = 100): number {
   return Math.min(Math.max(v, min), max);
@@ -72,50 +47,85 @@ function round(v: number): number {
 }
 
 export class SunflowerApiService {
-  private useLiveApi = false;
+  private isLiveConnected = false;
 
-  setLiveMode(enabled: boolean) {
-    this.useLiveApi = enabled;
+  public getBaseUrl(): string {
+    return BASE_URL;
   }
 
-  isLiveMode(): boolean {
-    return this.useLiveApi;
+  public isConnected(): boolean {
+    return this.isLiveConnected;
   }
 
-  async getAll(): Promise<Sunflower[]> {
-    if (this.useLiveApi) {
-      try {
-        const res = await fetch(API_BASE);
-        if (res.ok) {
-          const json = await res.json();
-          return json.data;
-        }
-      } catch (err) {
-        console.warn('Live API request failed, falling back to local state:', err);
-      }
+  /**
+   * Health check to detect whether the Express backend on :5000 is reachable
+   */
+  async checkHealth(): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${BASE_URL}/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      this.isLiveConnected = res.ok;
+      return res.ok;
+    } catch {
+      this.isLiveConnected = false;
+      return false;
     }
-    return [...mockSunflowers];
   }
 
-  async create(input: CreateSunflowerInput): Promise<Sunflower> {
-    if (this.useLiveApi) {
-      try {
-        const res = await fetch(API_BASE, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          return json.data;
-        }
-      } catch (err) {
-        console.warn('Live API create failed, using local mock:', err);
+  /**
+   * Fetch all sunflowers from live database with automatic fallback to local cache
+   */
+  async getAll(): Promise<{ data: Sunflower[]; source: 'live' | 'cache' }> {
+    try {
+      const res = await fetch(API_ENDPOINT);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        this.isLiveConnected = true;
+        localCache = json.data;
+        saveLocalCache(localCache);
+        return { data: json.data, source: 'live' };
       }
+    } catch (err: any) {
+      this.isLiveConnected = false;
+      console.warn(`[Backend Offline] Using local cache. Reason: ${err.message}`);
+    }
+    return { data: [...localCache], source: 'cache' };
+  }
+
+  /**
+   * Plant a new sunflower seed via POST /api/sunflowers
+   */
+  async create(input: CreateSunflowerInput): Promise<{ data: Sunflower; source: 'live' | 'cache' }> {
+    try {
+      const res = await fetch(API_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        throw new Error(errorJson.message || `Failed to plant sunflower (HTTP ${res.status})`);
+      }
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.isLiveConnected = true;
+        localCache = [json.data, ...localCache.filter((s) => s.id !== json.data.id)];
+        saveLocalCache(localCache);
+        return { data: json.data, source: 'live' };
+      }
+    } catch (err: any) {
+      console.warn(`[Backend Offline] Planting locally. Reason: ${err.message}`);
+      this.isLiveConnected = false;
     }
 
-    const newSunflower: Sunflower = {
-      id: `sunflower-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    // Local fallback creation
+    const fallbackFlower: Sunflower = {
+      id: `local-seed-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name: input.name?.trim() || 'Sunny Sprout',
       petalColor: input.petalColor || '#FFD700',
       growthStage: clamp(input.growthStage ?? 0),
@@ -127,126 +137,130 @@ export class SunflowerApiService {
       updatedAt: new Date().toISOString(),
     };
 
-    mockSunflowers.unshift(newSunflower);
-    saveLocalSunflowers(mockSunflowers);
-    return newSunflower;
+    localCache.unshift(fallbackFlower);
+    saveLocalCache(localCache);
+    return { data: fallbackFlower, source: 'cache' };
   }
 
-  async nurture(id: string, action: NurtureAction): Promise<NurtureResult> {
-    if (this.useLiveApi) {
-      try {
-        const res = await fetch(`${API_BASE}/${id}/nurture`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action }),
-        });
-        if (res.ok) {
-          return await res.json();
-        }
-      } catch (err) {
-        console.warn('Live API nurture failed, falling back to local simulation:', err);
+  /**
+   * Nurture a sunflower via PATCH /api/sunflowers/:id/nurture
+   */
+  async nurture(id: string, action: NurtureAction): Promise<NurtureResult & { source: 'live' | 'cache' }> {
+    try {
+      const res = await fetch(`${API_ENDPOINT}/${id}/nurture`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || `Nurture action failed (HTTP ${res.status})`);
       }
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        this.isLiveConnected = true;
+        // Update local cache
+        localCache = localCache.map((s) => (s.id === id ? json.data : s));
+        saveLocalCache(localCache);
+        return {
+          sunflower: json.data,
+          actionTaken: json.actionTaken || action,
+          message: json.message || `Sunflower nurtured with ${action}.`,
+          previousStats: json.previousStats || {
+            growthStage: json.data.growthStage,
+            waterLevel: json.data.waterLevel,
+            sunlightExposure: json.data.sunlightExposure,
+            height: json.data.height,
+          },
+          source: 'live',
+        };
+      }
+    } catch (err: any) {
+      console.warn(`[Backend Offline] Nurturing locally. Reason: ${err.message}`);
+      this.isLiveConnected = false;
     }
 
-    const index = mockSunflowers.findIndex((s) => s.id === id);
-    if (index === -1) {
-      throw new Error(`Sunflower ${id} not found`);
-    }
+    // Local simulation fallback
+    const target = localCache.find((s) => s.id === id);
+    if (!target) throw new Error(`Sunflower '${id}' not found`);
 
-    const current = mockSunflowers[index];
     const prevStats = {
-      growthStage: current.growthStage,
-      waterLevel: current.waterLevel,
-      sunlightExposure: current.sunlightExposure,
-      height: current.height,
+      growthStage: target.growthStage,
+      waterLevel: target.waterLevel,
+      sunlightExposure: target.sunlightExposure,
+      height: target.height,
     };
 
-    let newGrowth = current.growthStage;
-    let newWater = current.waterLevel;
-    let newSunlight = current.sunlightExposure;
-    let newHeight = current.height;
-    let newLastWateredAt = current.lastWateredAt;
+    let newGrowth = target.growthStage;
+    let newWater = target.waterLevel;
+    let newSun = target.sunlightExposure;
+    let newHeight = target.height;
     let message = '';
 
-    const MAX_HEIGHT = 220.0;
-
     switch (action) {
-      case 'water': {
-        newWater = clamp(current.waterLevel + 20);
-        newLastWateredAt = new Date().toISOString();
-        newSunlight = clamp(current.sunlightExposure - 4);
-        const delta = current.waterLevel > 85 ? 3 : 8;
-        newGrowth = clamp(current.growthStage + delta);
-        newHeight = Math.min(MAX_HEIGHT, round(current.height + delta * 0.4));
-        message = newGrowth >= 100 && current.growthStage < 100
-          ? `Watered "${current.name}"! It has blossomed into full bloom! 🌻`
-          : `Watered "${current.name}"! Hydration is now at ${newWater}%.`;
+      case 'water':
+        newWater = clamp(target.waterLevel + 20);
+        newSun = clamp(target.sunlightExposure - 4);
+        newGrowth = clamp(target.growthStage + 8);
+        newHeight = Math.min(220, round(target.height + 3.5));
+        message = `Watered "${target.name}"! Hydration is now at ${newWater}%.`;
         break;
-      }
-      case 'sunlight': {
-        newSunlight = clamp(current.sunlightExposure + 20);
-        newWater = clamp(current.waterLevel - 8);
-        const delta = current.sunlightExposure > 85 ? 3 : 8;
-        newGrowth = clamp(current.growthStage + delta);
-        newHeight = Math.min(MAX_HEIGHT, round(current.height + delta * 0.45));
-        message = newGrowth >= 100 && current.growthStage < 100
-          ? `Bathed "${current.name}" in sunlight! Radiant full bloom! 🌻`
-          : `Basking in the warm sunshine! Sunlight exposure reached ${newSunlight}%.`;
+      case 'sunlight':
+        newSun = clamp(target.sunlightExposure + 20);
+        newWater = clamp(target.waterLevel - 8);
+        newGrowth = clamp(target.growthStage + 8);
+        newHeight = Math.min(220, round(target.height + 4.0));
+        message = `Basking "${target.name}" in sunlight! Sunlight reached ${newSun}%.`;
         break;
-      }
-      case 'fertilize': {
-        const delta = 15;
-        newGrowth = clamp(current.growthStage + delta);
-        newHeight = Math.min(MAX_HEIGHT, round(current.height + 6.5));
-        newWater = clamp(current.waterLevel - 10);
-        newSunlight = clamp(current.sunlightExposure - 6);
-        message = newGrowth >= 100 && current.growthStage < 100
-          ? `Fertilized "${current.name}"! Surged straight into full bloom! 🌻`
-          : `Enriched "${current.name}"! Received an organic nutrient boost (+${delta}% growth).`;
+      case 'fertilize':
+        newGrowth = clamp(target.growthStage + 15);
+        newHeight = Math.min(220, round(target.height + 6.5));
+        newWater = clamp(target.waterLevel - 10);
+        newSun = clamp(target.sunlightExposure - 6);
+        message = `Fertilized "${target.name}"! Received an organic nutrient surge (+15% growth).`;
         break;
-      }
     }
 
     const updated: Sunflower = {
-      ...current,
+      ...target,
       growthStage: newGrowth,
       waterLevel: newWater,
-      sunlightExposure: newSunlight,
+      sunlightExposure: newSun,
       height: newHeight,
-      lastWateredAt: newLastWateredAt,
+      lastWateredAt: action === 'water' ? new Date().toISOString() : target.lastWateredAt,
       updatedAt: new Date().toISOString(),
     };
 
-    mockSunflowers[index] = updated;
-    saveLocalSunflowers(mockSunflowers);
+    localCache = localCache.map((s) => (s.id === id ? updated : s));
+    saveLocalCache(localCache);
 
     return {
       sunflower: updated,
       actionTaken: action,
       message,
       previousStats: prevStats,
+      source: 'cache',
     };
   }
 
+  /**
+   * Remove a sunflower via DELETE /api/sunflowers/:id
+   */
   async delete(id: string): Promise<boolean> {
-    if (this.useLiveApi) {
-      try {
-        const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
-        if (res.ok) return true;
-      } catch (err) {
-        console.warn('Live API delete failed:', err);
+    try {
+      const res = await fetch(`${API_ENDPOINT}/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        this.isLiveConnected = true;
       }
+    } catch (err: any) {
+      console.warn(`[Backend Offline] Deleting from local cache only. Reason: ${err.message}`);
     }
 
-    mockSunflowers = mockSunflowers.filter((s) => s.id !== id);
-    saveLocalSunflowers(mockSunflowers);
+    localCache = localCache.filter((s) => s.id !== id);
+    saveLocalCache(localCache);
     return true;
-  }
-
-  resetToDefaults() {
-    mockSunflowers = [...INITIAL_MOCK_SUNFLOWERS];
-    saveLocalSunflowers(mockSunflowers);
-    return mockSunflowers;
   }
 }
 

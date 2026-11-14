@@ -10,7 +10,7 @@ An interactive botanical animation web application simulating the lifecycle, gro
 |---|---|---|---|
 | **Phase 1** | **Backend & Database Layer** | **✅ Completed** | Express + Prisma + SQLite backend, REST API, Zod validations, nurture logic, seed script, automated test suite. |
 | **Phase 2** | **Frontend & Canvas Animation** | **✅ Completed** | 60FPS procedural botanical canvas, Fibonacci phyllotaxis seeds, 34-petal bloom, heliotropism cursor tracking, particle systems, glassmorphic HUD, growth scrubber. |
-| **Phase 3** | **Integration, Polish & Audio** | ⏳ *Next Up* | Live state synchronization between frontend & backend, sound effects, responsive styling polish, and deployment packaging. |
+| **Phase 3** | **Full-Stack Integration, Decay & Audio** | **✅ Completed** | Live REST connection to backend (:5000), living garden resource decay over time, Web Audio API sound generator, celebratory bloom burst, concurrent dev runner. |
 
 ---
 
@@ -52,45 +52,73 @@ The database table `sunflowers` is defined in [`backend/prisma/schema.prisma`](f
 - **Node.js**: v18+ (verified on Node v24)
 - **npm**: v9+
 
-### 2. Install Backend Dependencies
+### 2. Install Dependencies
 ```bash
-cd backend
+# Root & monorepo tools
 npm install
+
+# Backend dependencies
+cd backend && npm install && cd ..
+
+# Frontend dependencies
+cd frontend && npm install && cd ..
 ```
 
-### 3. Initialize Database & Generate Prisma Client
+### 3. Initialize Database & Seed
 ```bash
 npm run db:push
+npm run seed:backend
 ```
-*Creates the local SQLite database (`backend/prisma/dev.db`) and compiles Prisma Client.*
+*Creates the local SQLite database (`backend/prisma/dev.db`), compiles Prisma Client, and seeds the starter sunflower (`Helianthus Starter`).*
 
-### 4. Seed the Database
+### 4. Start the Full-Stack Application (Unified Dev Runner)
 ```bash
-npm run seed
+npm run dev
 ```
-*Creates the starter sunflower (`Helianthus Starter`, id: `starter-sunflower-001`).*
+*Powered by `concurrently`: launches both the Express backend (`http://localhost:5000`) and the Vite React frontend (`http://localhost:5173`) simultaneously with color-coded live logs!*
 
-### 5. Start the Development Servers
-In one terminal, start the Backend API:
+Alternatively, run each service independently:
 ```bash
-npm run dev:backend
+npm run dev:backend   # Express API on :5000
+npm run dev:frontend  # Vite Canvas UI on :5173
 ```
-The backend starts on **`http://localhost:5000`**.
 
-In another terminal, start the Frontend Canvas Application:
+### 5. Run Automated Tests & Verify Builds
 ```bash
-npm run dev:frontend
-```
-The frontend starts on **`http://localhost:5173`**.
-
-### 6. Run the Automated Test Suite & Build
-```bash
-# Run backend API tests (11/11 tests pass)
+# Run backend API test suite (12/12 integration tests pass)
 npm run test:backend
 
-# Run frontend TypeScript & Vite build
-npm run build:frontend
+# Compile and verify full production builds
+npm run build
 ```
+
+---
+
+## 🌻 Living Garden Mechanics & Audio Features
+
+### ⏳ Time-Based Resource Decay
+- The garden stays alive even when you are away!
+- On `GET /api/sunflowers` and `GET /api/sunflowers/:id`, elapsed time is calculated:
+  - **Hydration**: Decreases by ~2.5% per elapsed hour without water.
+  - **Sunlight**: Natural attenuation by ~2.0% per elapsed hour.
+  - **Growth & Height**: Protected biological metrics that are **never reduced**.
+  - Persistent SQLite records update automatically when elapsed decay occurs.
+
+### 🎵 Procedural Web Audio API Synthesizer
+- Built-in zero-dependency sound effects generator (no audio files required!):
+  - **💧 Water Splash**: Gentle descending frequency sine drop with ripple resonance.
+  - **☀️ Sun Shimmer**: Warm harmonic chord (E5, G#5, B5) with soft vibrato.
+  - **🌿 Fertilize**: Ascending pentatonic arpeggio (C5 -> E5 -> G5 -> C6).
+  - **🌾 Budding Milestone (50%)**: Subtle two-note bell chime.
+  - **🌻 Full Bloom Milestone (100%)**: Grand golden harmonic chime with resonant sparkle overtones.
+- **Audio Toggle**: Muted by default to respect browser policies; click the speaker icon in the HUD to unmute!
+
+### 🎆 Celebratory Full Bloom Burst
+- When a sunflower reaches `growthStage === 100%`, a grand burst of 100+ golden pollen motes and fluttering ray petals erupts from the flower head.
+
+### 🔍 Visual Preview Growth Scrubber
+- Toggle the "Enable Preview Growth Slider" button to scrub from 0% to 100% to inspect every biological stage (seed, sprout, curved stalk, leaves, bud, Fibonacci bloom).
+- Clearly flagged as **Visual Preview Mode**—it temporarily overrides the canvas rendering without modifying the live database record!
 
 ---
 

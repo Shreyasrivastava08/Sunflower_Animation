@@ -175,7 +175,48 @@ async function runTests() {
       if (res.status !== 404) throw new Error(`Expected 404, got ${res.status}`);
     });
 
-    // Test 11: DELETE /api/sunflowers/:id removes sunflower
+    // Test 11: Time-based resource decay calculation
+    await assert('GET /api/sunflowers calculates living garden resource decay over elapsed time', async () => {
+      // Create a test sunflower with 10 hours of elapsed time since watering
+      const tenHoursAgo = new Date(Date.now() - 10 * 3600 * 1000);
+      const agedSunflower = await prisma.sunflower.create({
+        data: {
+          name: 'Time Decayed Test Flower',
+          growthStage: 50,
+          height: 60.0,
+          waterLevel: 80,
+          sunlightExposure: 70,
+          petalColor: '#FFD700',
+          lastWateredAt: tenHoursAgo,
+          updatedAt: tenHoursAgo,
+        },
+      });
+
+      const res = await fetch(`${BASE_URL}/api/sunflowers/${agedSunflower.id}`);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const json = await res.json();
+
+      // Water decay: 10 hours * 2.5% = 25% drop -> from 80% to 55%
+      if (json.data.waterLevel >= 80) {
+        throw new Error(`Expected decayed waterLevel < 80, got ${json.data.waterLevel}`);
+      }
+      // Sunlight decay: 10 hours * 2% = 20% drop -> from 70% to 50%
+      if (json.data.sunlightExposure >= 70) {
+        throw new Error(`Expected decayed sunlightExposure < 70, got ${json.data.sunlightExposure}`);
+      }
+      // Growth and height must remain completely unreduced
+      if (json.data.growthStage !== 50) {
+        throw new Error(`Expected growthStage to remain 50, got ${json.data.growthStage}`);
+      }
+      if (json.data.height !== 60.0) {
+        throw new Error(`Expected height to remain 60.0, got ${json.data.height}`);
+      }
+
+      // Cleanup
+      await prisma.sunflower.delete({ where: { id: agedSunflower.id } });
+    });
+
+    // Test 12: DELETE /api/sunflowers/:id removes sunflower
     await assert('DELETE /api/sunflowers/:id successfully deletes sunflower', async () => {
       const res = await fetch(`${BASE_URL}/api/sunflowers/${customSunflowerId}`, {
         method: 'DELETE',

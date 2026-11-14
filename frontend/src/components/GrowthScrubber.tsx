@@ -44,6 +44,9 @@ export const GrowthScrubber: React.FC<GrowthScrubberProps> = ({
             <span className="text-xs text-amber-400 font-medium">
               {getStageName(growthValue)}
             </span>
+            <span className="text-[10px] text-amber-300/70 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+              Visual Preview Only
+            </span>
             <button
               type="button"
               onClick={onResetGrowth}

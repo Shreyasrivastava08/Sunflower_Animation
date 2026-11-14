@@ -1,12 +1,18 @@
 import React from 'react';
-import { Droplets, Sun, Sparkles, Ruler, Flower2, Clock } from 'lucide-react';
+import { Droplets, Sun, Sparkles, Ruler, Flower2, Clock, Volume2, VolumeX } from 'lucide-react';
 import { Sunflower } from '../types/sunflower';
 
 interface TelemetryHUDProps {
   sunflower: Sunflower;
+  isMuted?: boolean;
+  onToggleSound?: () => void;
 }
 
-export const TelemetryHUD: React.FC<TelemetryHUDProps> = ({ sunflower }) => {
+export const TelemetryHUD: React.FC<TelemetryHUDProps> = ({
+  sunflower,
+  isMuted = true,
+  onToggleSound,
+}) => {
   const getStageBadge = (stage: number) => {
     if (stage <= 15) {
       return { label: 'Seedling Sprout', emoji: '🌱', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
@@ -39,10 +45,26 @@ export const TelemetryHUD: React.FC<TelemetryHUDProps> = ({ sunflower }) => {
             <span>Petal: {sunflower.petalColor.toUpperCase()}</span>
           </p>
         </div>
-        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border flex items-center gap-1 ${badge.color}`}>
-          <span>{badge.emoji}</span>
-          <span>{badge.label}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          {onToggleSound && (
+            <button
+              type="button"
+              onClick={onToggleSound}
+              title={isMuted ? 'Unmute Ambient Sound Effects' : 'Mute Ambient Sound Effects'}
+              className={`p-1.5 rounded-xl border transition-all ${
+                isMuted
+                  ? 'bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10'
+                  : 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-md shadow-amber-500/20'
+              }`}
+            >
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
+          )}
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border flex items-center gap-1 ${badge.color}`}>
+            <span>{badge.emoji}</span>
+            <span>{badge.label}</span>
+          </span>
+        </div>
       </div>
 
       <div className="h-px bg-white/10" />

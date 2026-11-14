@@ -1,6 +1,18 @@
 # Changelog
 
 ### Changes in sunflower_animation
+- EADME.md
+- ackend/src/services/sunflowerService.ts
+- ackend/test/api.test.ts
+- ackend/tsconfig.json
+- rontend/src/App.tsx
+- rontend/src/components/GardenSelector.tsx
+- rontend/src/components/GrowthScrubber.tsx
+- rontend/src/components/SunflowerCanvas.tsx
+- rontend/src/components/TelemetryHUD.tsx
+- rontend/src/services/sunflowerApi.ts
+
+### Changes in sunflower_animation
 - gitignore
 - EADME.md
 - rontend/README.md

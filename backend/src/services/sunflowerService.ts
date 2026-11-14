@@ -22,18 +22,56 @@ export interface NurtureResult {
 }
 
 export class SunflowerService {
+  /**
+   * Calculates time-based resource decay:
+   * Gently decreases waterLevel and sunlightExposure over elapsed hours.
+   * Never decreases growthStage or height.
+   */
+  private async applyResourceDecay(flower: any) {
+    const now = Date.now();
+    const lastWateredTime = new Date(flower.lastWateredAt).getTime();
+    const lastUpdateTime = new Date(flower.updatedAt).getTime();
+
+    const elapsedWaterHours = Math.max(0, (now - lastWateredTime) / (1000 * 60 * 60));
+    const elapsedUpdateHours = Math.max(0, (now - lastUpdateTime) / (1000 * 60 * 60));
+
+    // 2.5% water evaporation per hour since last watered
+    const waterDecay = Math.floor(elapsedWaterHours * 2.5);
+    // 2.0% sunlight decay per hour since last interaction
+    const sunDecay = Math.floor(elapsedUpdateHours * 2.0);
+
+    if (waterDecay > 0 || sunDecay > 0) {
+      const newWater = clamp(flower.waterLevel - waterDecay);
+      const newSun = clamp(flower.sunlightExposure - sunDecay);
+
+      if (newWater !== flower.waterLevel || newSun !== flower.sunlightExposure) {
+        return prisma.sunflower.update({
+          where: { id: flower.id },
+          data: {
+            waterLevel: newWater,
+            sunlightExposure: newSun,
+          },
+        });
+      }
+    }
+    return flower;
+  }
+
   async getAllSunflowers() {
-    return prisma.sunflower.findMany({
+    const flowers = await prisma.sunflower.findMany({
       orderBy: {
         createdAt: 'desc',
       },
     });
+    return Promise.all(flowers.map((f) => this.applyResourceDecay(f)));
   }
 
   async getSunflowerById(id: string) {
-    return prisma.sunflower.findUnique({
+    const flower = await prisma.sunflower.findUnique({
       where: { id },
     });
+    if (!flower) return null;
+    return this.applyResourceDecay(flower);
   }
 
   async createSunflower(input: CreateSunflowerInput) {
